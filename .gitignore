@@ -9,6 +9,8 @@ htmlcov/
 dist/
 build/
 *.egg-info/
+# macOS
+.DS_Store
 
 data/
 logs/
