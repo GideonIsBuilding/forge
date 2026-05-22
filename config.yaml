@@ -1,0 +1,30 @@
+server:
+  host: 0.0.0.0
+  port: 8080
+  public_url: "http://localhost:8080"
+
+database:
+  url: "sqlite:///data/forge.db"
+
+storage:
+  blob_dir: "blobs"
+  log_dir: "logs"
+  workspace_dir: "workspaces"
+
+runs:
+  max_concurrency: 2
+  default_timeout_seconds: 1800
+
+runner:
+  docker_network: "forge_build_net"
+  registry_host: "forge-api"
+  default_image: "alpine:3.18"
+  pids_limit: 256
+  no_new_privileges: true
+  drop_capabilities: ["ALL"]
+
+slack:
+  webhook_url: ""
+  tags:
+    platform: "@platform"
+    security: "@security"

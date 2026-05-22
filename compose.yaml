@@ -1,0 +1,29 @@
+services:
+  forge-api:
+    build: .
+    command: uvicorn engine.main:app --host 0.0.0.0 --port 8080
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - forge-data:/app/data
+      - forge-blobs:/app/blobs
+      - forge-logs:/app/logs
+      - forge-workspaces:/app/workspaces
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      FORGE_CONFIG: /app/config.yaml
+    networks:
+      - forge-control
+      - forge-build-net
+
+networks:
+  forge-control:
+  forge-build-net:
+    internal: true
+
+volumes:
+  forge-data:
+  forge-blobs:
+  forge-logs:
+  forge-workspaces:

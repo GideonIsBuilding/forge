@@ -1,0 +1,137 @@
+<svg width="1600" height="1250" viewBox="0 0 1600 1250" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .bg { fill: #050505; }
+      .box { stroke-width: 2; rx: 18; ry: 18; }
+      .panel { stroke-width: 2; rx: 28; ry: 28; }
+      .text { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #d8d5ce; font-weight: 700; }
+      .sub { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #bdb8b0; font-weight: 600; }
+      .green-title { fill: #b7ead8; }
+      .green-sub { fill: #68d6aa; }
+      .purple-title { fill: #ddd8ff; }
+      .purple-sub { fill: #bab2f0; }
+      .orange-title { fill: #ffd996; }
+      .orange-sub { fill: #f2aa37; }
+      .arrow { stroke: #bdb8b0; stroke-width: 3; fill: none; marker-end: url(#arrowhead); }
+      .dash { stroke: #d0cabe; stroke-width: 3; fill: none; stroke-dasharray: 8 8; marker-end: url(#arrowhead); }
+      .small { font-size: 24px; }
+      .medium { font-size: 28px; }
+      .large { font-size: 34px; }
+      .label { font-size: 25px; fill: #e2ded6; font-weight: 800; }
+    </style>
+    <marker id="arrowhead" markerWidth="14" markerHeight="10" refX="12" refY="5" orient="auto">
+      <path d="M0,0 L14,5 L0,10 Z" fill="#bdb8b0"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" width="1600" height="1250"/>
+
+  <!-- Top CLI -->
+  <rect x="130" y="60" width="1340" height="110" rx="22" fill="#454541" stroke="#c8c3bb" stroke-width="2"/>
+  <text x="800" y="118" text-anchor="middle" class="text large">forge CLI</text>
+  <text x="800" y="155" text-anchor="middle" class="sub medium">login · run · logs · publish · resolve · ls</text>
+
+  <!-- API Gateway -->
+  <path class="arrow" d="M800 170 L800 245"/>
+  <text x="823" y="226" class="label">Bearer token</text>
+  <rect x="500" y="245" width="600" height="90" rx="18" fill="#433993" stroke="#978dff" stroke-width="2"/>
+  <text x="800" y="293" text-anchor="middle" class="text large" fill="#e4e0ff">HTTP API gateway</text>
+  <text x="800" y="328" text-anchor="middle" class="sub medium" fill="#c1baff">Auth middleware · routing · request validation</text>
+
+  <!-- Split arrows -->
+  <path class="arrow" d="M630 335 L440 430"/>
+  <path class="arrow" d="M970 335 L1160 430"/>
+
+  <!-- CI Engine panel -->
+  <rect class="panel" x="105" y="430" width="650" height="620" fill="#075945" stroke="#39dba4"/>
+  <text x="430" y="485" text-anchor="middle" class="text large green-title">CI engine</text>
+
+  <rect class="box" x="140" y="510" width="570" height="92" fill="#0b604b" stroke="#54d9af"/>
+  <text x="425" y="558" text-anchor="middle" class="text medium green-title">Pipeline parser</text>
+  <text x="425" y="593" text-anchor="middle" class="sub small green-sub">Strict YAML · required fields · line-aware errors</text>
+
+  <rect class="box" x="140" y="640" width="570" height="106" fill="#0b604b" stroke="#54d9af"/>
+  <text x="425" y="688" text-anchor="middle" class="text medium green-title">Pre-build preflight</text>
+  <text x="425" y="723" text-anchor="middle" class="sub small green-sub">Resolve deps · write lockfile · fail before jobs</text>
+
+  <rect class="box" x="140" y="785" width="570" height="112" fill="#0b604b" stroke="#54d9af"/>
+  <text x="425" y="833" text-anchor="middle" class="text medium green-title">Dependency pull + checksum verify</text>
+  <text x="425" y="868" text-anchor="middle" class="sub small green-sub">Fetch blobs · recompute SHA-256 · compare lockfile</text>
+
+  <rect class="box" x="140" y="925" width="570" height="100" fill="#0b604b" stroke="#54d9af"/>
+  <text x="425" y="970" text-anchor="middle" class="text medium green-title">DAG scheduler + isolated runner</text>
+  <text x="425" y="1005" text-anchor="middle" class="sub small green-sub">Topo sort · parallel jobs · Docker namespaces/cgroups</text>
+
+  <path class="arrow" d="M425 602 L425 635"/>
+  <path class="arrow" d="M425 746 L425 780"/>
+  <path class="arrow" d="M425 897 L425 920"/>
+
+  <!-- Side log service -->
+  <rect class="box" x="570" y="875" width="300" height="112" fill="#075945" stroke="#54d9af"/>
+  <text x="720" y="922" text-anchor="middle" class="text medium green-title">Log service</text>
+  <text x="720" y="956" text-anchor="middle" class="sub small green-sub">Append-only disk logs</text>
+  <text x="720" y="983" text-anchor="middle" class="sub small green-sub">SSE backlog + live tail</text>
+  <path class="dash" d="M560 960 L535 960"/>
+
+  <!-- Registry panel -->
+  <rect class="panel" x="845" y="430" width="650" height="620" fill="#40378b" stroke="#998fff"/>
+  <text x="1170" y="485" text-anchor="middle" class="text large purple-title">Artifact registry</text>
+
+  <rect class="box" x="880" y="510" width="570" height="120" fill="#443b93" stroke="#8d83e8"/>
+  <text x="1165" y="558" text-anchor="middle" class="text medium purple-title">Dependency resolver</text>
+  <text x="1165" y="593" text-anchor="middle" class="sub small purple-sub">Semver: exact · ^ · ~ · comparator ranges</text>
+  <text x="1165" y="621" text-anchor="middle" class="sub small purple-sub">Transitive walk · cycle/conflict detect · lockfile</text>
+
+  <rect class="box" x="880" y="675" width="570" height="120" fill="#443b93" stroke="#8d83e8"/>
+  <text x="1165" y="723" text-anchor="middle" class="text medium purple-title">Blob storage</text>
+  <text x="1165" y="758" text-anchor="middle" class="sub small purple-sub">Content-addressable · SHA-256 keyed</text>
+  <text x="1165" y="786" text-anchor="middle" class="sub small purple-sub">Server-side checksum on upload and pull</text>
+
+  <rect class="box" x="880" y="840" width="570" height="120" fill="#443b93" stroke="#8d83e8"/>
+  <text x="1165" y="888" text-anchor="middle" class="text medium purple-title">Metadata store</text>
+  <text x="1165" y="923" text-anchor="middle" class="sub small purple-sub">SQLite/Postgres · name · version · hash</text>
+  <text x="1165" y="951" text-anchor="middle" class="sub small purple-sub">Unique(name, version) gives 409 immutability</text>
+
+  <rect class="box" x="880" y="985" width="570" height="56" fill="#443b93" stroke="#8d83e8"/>
+  <text x="1165" y="1023" text-anchor="middle" class="text medium purple-title">Auth · hashed bearer tokens</text>
+
+  <path class="arrow" d="M1165 630 L1165 670"/>
+  <path class="arrow" d="M1165 795 L1165 835"/>
+  <path class="arrow" d="M1165 960 L1165 980"/>
+
+  <!-- Cross subsystem calls -->
+  <path class="dash" d="M710 693 C760 670, 815 615, 880 590"/>
+  <text x="718" y="660" class="label">resolve + lockfile</text>
+
+  <path class="dash" d="M710 842 C770 830, 815 770, 880 735"/>
+  <text x="716" y="824" class="label">pull deps</text>
+
+  <path class="dash" d="M710 964 C780 955, 815 925, 880 900"/>
+  <text x="720" y="945" class="label">publish artifacts</text>
+
+  <!-- Bottom DB and alerts -->
+  <path class="arrow" d="M425 1025 L425 1100"/>
+  <rect x="130" y="930" width="0" height="0" fill="none"/>
+  <rect x="130" y="970" width="0" height="0" fill="none"/>
+
+  <rect x="130" y="1100" width="565" height="86" rx="16" fill="#454541" stroke="#c8c3bb" stroke-width="2"/>
+  <text x="412" y="1142" text-anchor="middle" class="text medium">Run state DB</text>
+  <text x="412" y="1174" text-anchor="middle" class="sub small">queued · running · succeeded · failed · integrity/conflict/cycle</text>
+
+  <rect x="890" y="1100" width="565" height="86" rx="16" fill="#704100" stroke="#f1a726" stroke-width="2"/>
+  <text x="1172" y="1142" text-anchor="middle" class="text medium orange-title">Slack alerts</text>
+  <text x="1172" y="1174" text-anchor="middle" class="sub small orange-sub">started · succeeded · failed · integrity · resolution</text>
+
+  <path class="arrow" d="M695 1143 L885 1143"/>
+  <path class="arrow" d="M1310 1041 L1310 1095"/>
+
+  <!-- Legend -->
+  <line x1="120" y1="1220" x2="210" y2="1220" stroke="#d0cabe" stroke-width="4" stroke-dasharray="8 8"/>
+  <text x="230" y="1229" class="sub small">cross-subsystem call</text>
+  <line x1="500" y1="1220" x2="590" y2="1220" stroke="#bdb8b0" stroke-width="4" marker-end="url(#arrowhead)"/>
+  <text x="615" y="1229" class="sub small">internal data flow</text>
+
+  <text x="800" y="80" text-anchor="middle" class="sub small" opacity="0"></text>
+  <text x="800" y="1048" text-anchor="middle" class="sub small" opacity="0"></text>
+  <text x="800" y="1040" text-anchor="middle" class="sub small" opacity="0"></text>
+</svg>
