@@ -11,6 +11,8 @@ Forge exposes one HTTP API. Internally it has two cooperating subsystems:
 - `engine/`: pipeline parsing, pre-build resolution, DAG scheduling, isolated job execution, log streaming, run state.
 - `registry/`: bearer-token auth, content-addressed artifact storage, immutable metadata, dependency resolution.
 
+![Architecture Diagram](./forge-architecture.png)
+
 ## Repository Structure
 
 ```text
