@@ -18,6 +18,7 @@ stream_logs(run_id, job_name, follow)  -> Iterator[str]  (SSE lines)
 
 import logging
 import threading
+from typing import Dict, Iterator, List, Optional
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -172,7 +173,7 @@ def _notify(run_id: str, job_name: str) -> None:
         event.set()
 
 
-def _get_event(key: str) -> threading.Event | None:
+def _get_event(key: str) -> Optional[threading.Event]:
     """
     Return the threading.Event for a live job, or None if the job
     has finished (i.e. close_log() was already called).
