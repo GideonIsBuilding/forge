@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from typing import Optional
+from engine import slack
 from collections import defaultdict, deque
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,6 +15,8 @@ from engine.logs import close_log, register_job
 from engine.parser import Job, Pipeline
 from engine.runner import JobResult
 from engine import runs as run_lifecycle
+from engine import publisher as artifact_publisher
+
 from registry import metadata
 
 logger = logging.getLogger(__name__)
@@ -21,6 +25,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Exceptions
 # ---------------------------------------------------------------------------
+
 
 class SchedulerError(ValueError):
     pass
@@ -38,6 +43,7 @@ class JobCycleError(SchedulerError):
 # async run_job() signature qualifies.
 # ---------------------------------------------------------------------------
 
+
 class RunnerProtocol(Protocol):
     async def run_job(
         self,
@@ -45,6 +51,7 @@ class RunnerProtocol(Protocol):
         workspace: Path,
         forge_url: str,
         forge_token: str,
+        run_id: str,
     ) -> JobResult: ...
 
 
@@ -54,6 +61,7 @@ class RunnerProtocol(Protocol):
 # Used both for early cycle detection in execute_pipeline and as a standalone
 # utility (e.g. Pre-build Preflight in the arch diagram).
 # ---------------------------------------------------------------------------
+
 
 def topological_batches(jobs: dict[str, list[str]]) -> list[list[str]]:
     """Return parallel-runnable batches in dependency order.
@@ -99,6 +107,7 @@ def topological_batches(jobs: dict[str, list[str]]) -> list[list[str]]:
 # ---------------------------------------------------------------------------
 # Pipeline execution orchestrator
 # ---------------------------------------------------------------------------
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -147,8 +156,13 @@ async def execute_pipeline(
     # A cycle would cause coroutines to deadlock on event.wait() indefinitely.
     try:
         topological_batches(needs_map)
-    except JobCycleError:
+    except JobCycleError as exc:
         run_lifecycle.mark_run_status(run_id, "cycle_failure")
+        slack.notify_resolution_failure(
+            run_id=run_id,
+            pipeline_name=pipeline.name,
+            detail=str(exc),
+        )
         raise
 
     # Persist all jobs as "queued" upfront. Clients polling GET /runs/{id}
@@ -172,12 +186,15 @@ async def execute_pipeline(
             run_row.lockfile,
             workspace,
         )
-
+    # Mark run running + Slack alert.
     run_lifecycle.mark_run_status(run_id, "running")
+    slack.notify_pipeline_started(run_id=run_id, pipeline_name=pipeline.name)
     run_start = time.monotonic()
     logger.info(
         "Run %s started — %d job(s), max_concurrency=%d",
-        run_id, len(jobs), max_concurrency,
+        run_id,
+        len(jobs),
+        max_concurrency,
     )
 
     # Per-job completion signal. A job sets its event when it finishes,
@@ -190,7 +207,11 @@ async def execute_pipeline(
     # Acquired inside the coroutine after all deps have succeeded.
     semaphore = asyncio.Semaphore(max_concurrency)
 
+    # Track the first failing job name for the Slack alert.
+    first_failing_job: Optional[str] = None
+
     async def run_one(job_name: str) -> None:
+        nonlocal first_failing_job
         job = jobs[job_name]
 
         # Wait for each dependency in declaration order. Bail out on the first
@@ -202,7 +223,10 @@ async def execute_pipeline(
                 metadata.update_job_status(run_id, job_name, "skipped")
                 logger.info(
                     "Job %s/%s skipped (dep '%s' %s)",
-                    run_id, job_name, dep, job_statuses.get(dep),
+                    run_id,
+                    job_name,
+                    dep,
+                    job_statuses.get(dep),
                 )
                 done_events[job_name].set()
                 return
@@ -219,7 +243,9 @@ async def execute_pipeline(
 
             exit_code = -1
             try:
-                result = await runner.run_job(job, workspace, forge_url, forge_token)
+                result = await runner.run_job(
+                    job, workspace, forge_url, forge_token, run_id
+                )  # NOTE
                 exit_code = result.exit_code
             except Exception:
                 logger.exception("Job %s/%s raised an unexpected exception", run_id, job_name)
@@ -228,7 +254,9 @@ async def execute_pipeline(
                 outcome = "succeeded" if exit_code == 0 else "failed"
                 job_statuses[job_name] = outcome
                 metadata.update_job_status(
-                    run_id, job_name, outcome,
+                    run_id,
+                    job_name,
+                    outcome,
                     exit_code=exit_code,
                     started_at=started,
                     finished_at=finished,
@@ -238,9 +266,7 @@ async def execute_pipeline(
                 # coroutines for dependent jobs are unblocked.
                 close_log(run_id, job_name)
                 done_events[job_name].set()
-                logger.info(
-                    "Job %s/%s %s (exit_code=%d)", run_id, job_name, outcome, exit_code
-                )
+                logger.info("Job %s/%s %s (exit_code=%d)", run_id, job_name, outcome, exit_code)
 
     # Launch every job coroutine simultaneously. They self-regulate:
     #   - event.wait() blocks a coroutine until its deps complete
@@ -252,6 +278,37 @@ async def execute_pipeline(
 
     duration_s = time.monotonic() - run_start
     final_status = "failed" if any(s == "failed" for s in job_statuses.values()) else "succeeded"
+
+    # 6. Auto-publish declared artifacts if all jobs succeeded.
+    if final_status == "succeeded" and pipeline.artifacts:
+        try:
+            published = artifact_publisher.publish_pipeline_artifacts(
+                pipeline=pipeline,
+                workspace=workspace,
+                run_id=run_id,
+                forge_url=forge_url,
+                forge_token=forge_token,
+            )
+            logger.info("Run %s: auto-published %d artifact(s)", run_id, len(published))
+        except artifact_publisher.PublishError as exc:
+            logger.error("Run %s: auto-publish failed — %s", run_id, exc)
+            final_status = "failed"
+
     run_lifecycle.mark_run_status(run_id, final_status, duration_s)
+
+    if final_status == "succeeded":
+        slack.notify_pipeline_succeeded(
+            run_id=run_id,
+            pipeline_name=pipeline.name,
+            duration_s=duration_s,
+        )
+    else:
+        slack.notify_pipeline_failed(
+            run_id=run_id,
+            pipeline_name=pipeline.name,
+            duration_s=duration_s,
+            failing_job=first_failing_job,
+        )
+
     logger.info("Run %s completed: %s (%.2fs)", run_id, final_status, duration_s)
     return final_status
