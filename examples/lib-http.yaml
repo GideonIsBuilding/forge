@@ -1,0 +1,20 @@
+name: build-lib-http
+version: 1.0.0
+dependencies:
+  - name: lib-core
+    version: "^1.0.0"
+jobs:
+  build:
+    runtime: alpine:3.18
+    resources:
+      cpu: 1.0
+      memory: 512Mi
+    steps:
+      - name: test
+        run: "echo 'running tests for lib-http' && ls deps/lib-core/ && mkdir -p src && echo 'lib-http source' > src/http.c"
+      - name: package
+        run: "tar czf out.tar.gz src/"
+artifacts:
+  - name: lib-http
+    version: 1.0.0
+    path: ./out.tar.gz
