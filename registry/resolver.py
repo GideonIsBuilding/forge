@@ -59,12 +59,16 @@ def select_highest(versions: list[str], constraints: list[str]) -> str:
 
 def _satisfies_comparators(version: Version, constraint: str) -> bool:
     for part in constraint.split():
-        if part.startswith(">=") and not version >= Version.parse(part[2:]):
-            return False
-        if part.startswith("<=") and not version <= Version.parse(part[2:]):
-            return False
-        if part.startswith(">") and not version > Version.parse(part[1:]):
-            return False
-        if part.startswith("<") and not version < Version.parse(part[1:]):
-            return False
+        if part.startswith(">="):
+            if not version >= Version.parse(part[2:]):
+                return False
+        elif part.startswith("<="):
+            if not version <= Version.parse(part[2:]):
+                return False
+        elif part.startswith(">"):
+            if not version > Version.parse(part[1:]):
+                return False
+        elif part.startswith("<"):
+            if not version < Version.parse(part[1:]):
+                return False
     return True
