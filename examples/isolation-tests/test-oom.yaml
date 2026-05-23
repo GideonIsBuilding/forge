@@ -1,0 +1,13 @@
+name: test-oom
+version: 1.0.0
+dependencies: []
+jobs:
+  build:
+    runtime: alpine:3.18
+    resources:
+      cpu: 0.5
+      memory: 64Mi
+    steps:
+      - name: oom
+        run: "cat /dev/zero | head -c 200m | tail"
+artifacts: []

@@ -33,29 +33,26 @@ from registry.storage import ChecksumMismatchError, save_blob
 
 logger = logging.getLogger(__name__)
 
-CHUNK_SIZE = 256 * 1024  # 256 KB — matches storage layer
+CHUNK_SIZE = 256 * 1024
 
 
 class PublishError(Exception):
     """Raised when an artifact cannot be published to the registry."""
 
 
-# ---------------------------------------------------------------------------
-# Public entry point
-# ---------------------------------------------------------------------------
-
-
 def publish_pipeline_artifacts(
     pipeline: Pipeline,
     workspace: Path,
     run_id: str,
+    forge_url: str | None = None,
+    forge_token: str | None = None,
 ) -> list[dict]:
     """
-    Publish every artifact declared in *pipeline.artifacts* to the registry.
+    Publish every artifact declared in pipeline.artifacts to the registry.
 
-    Each artifact file must exist under *workspace* at the declared path.
-    Files are SHA-256 hashed and written directly to the registry storage
-    and metadata layers.
+    forge_url and forge_token are accepted but unused — publishing goes
+    directly through the registry layer, not via HTTP. They are accepted
+    so the scheduler can pass them without needing to know the implementation.
 
     Returns a list of dicts with published artifact metadata.
     Raises PublishError on any failure.
@@ -79,27 +76,13 @@ def publish_pipeline_artifacts(
     return results
 
 
-# ---------------------------------------------------------------------------
-# Per-artifact logic
-# ---------------------------------------------------------------------------
-
-
 def _publish_one(artifact: Artifact, workspace: Path, run_id: str) -> dict:
-    """
-    Locate, hash, and store a single artifact directly via the registry layer.
-
-    Path resolution: artifact.path may be:
-      ./out.tar.gz          -> relative to workspace root
-      out.tar.gz            -> same
-      /workspace/out.tar.gz -> stripped to workspace-relative
-    """
     raw_path = artifact.path.lstrip("/")
     if raw_path.startswith("workspace/"):
-        raw_path = raw_path[len("workspace/") :]
+        raw_path = raw_path[len("workspace/"):]
 
     artifact_file = (workspace / raw_path).resolve()
 
-    # Safety: ensure resolved path stays inside the workspace
     try:
         artifact_file.relative_to(workspace.resolve())
     except ValueError:
@@ -144,9 +127,7 @@ def _publish_one(artifact: Artifact, workspace: Path, run_id: str) -> dict:
         if existing and existing.sha256 == sha256:
             logger.info(
                 "Run %s: %s@%s already exists with matching SHA-256, skipping",
-                run_id,
-                artifact.name,
-                artifact.version,
+                run_id, artifact.name, artifact.version,
             )
             return {
                 "name": artifact.name,
@@ -160,13 +141,8 @@ def _publish_one(artifact: Artifact, workspace: Path, run_id: str) -> dict:
         )
 
 
-# ---------------------------------------------------------------------------
-# SHA-256 helper
-# ---------------------------------------------------------------------------
-
-
 def _compute_sha256(path: Path) -> str:
-    """Stream-compute SHA-256 of a file without loading it into memory."""
+    """Stream-compute SHA-256 without loading the file into memory."""
     hasher = hashlib.sha256()
     with open(path, "rb") as f:
         while chunk := f.read(CHUNK_SIZE):

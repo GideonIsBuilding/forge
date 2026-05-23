@@ -36,16 +36,9 @@ logger = logging.getLogger(__name__)
 
 CHUNK_SIZE = 256 * 1024  # 256 KB
 
-# key: "<run_id>/<job_name>" -> threading.Event
-# An entry exists while the job is actively running.
-# Absence means the job has finished (or never started).
 _watchers: dict[str, threading.Event] = {}
 _watchers_lock = threading.Lock()
 
-
-# ---------------------------------------------------------------------------
-# Paths
-# ---------------------------------------------------------------------------
 
 def _log_root() -> Path:
     root = Path(config.log_dir())
@@ -60,16 +53,8 @@ def get_log_path(run_id: str, job_name: str) -> Path:
     return path
 
 
-# ---------------------------------------------------------------------------
-# Watcher lifecycle
-# ---------------------------------------------------------------------------
-
 def register_job(run_id: str, job_name: str) -> None:
-    """Mark a job as active so live SSE followers know to wait for lines.
-
-    Must be called before the job starts writing log lines. The matching
-    close_log() call signals completion and wakes any waiting SSE clients.
-    """
+    """Mark a job as active so live SSE followers know to wait for lines."""
     key = _watcher_key(run_id, job_name)
     with _watchers_lock:
         _watchers[key] = threading.Event()
@@ -77,20 +62,12 @@ def register_job(run_id: str, job_name: str) -> None:
 
 
 def close_log(run_id: str, job_name: str) -> None:
-    """Signal that a job has finished writing logs.
-
-    Removes the watcher entry. SSE followers will drain any remaining lines
-    written between their last read and this call, then disconnect cleanly.
-    """
+    """Signal that a job has finished writing logs."""
     key = _watcher_key(run_id, job_name)
     with _watchers_lock:
         _watchers.pop(key, None)
     logger.debug("Log watcher closed: %s", key)
 
-
-# ---------------------------------------------------------------------------
-# Writing
-# ---------------------------------------------------------------------------
 
 def write_line(run_id: str, job_name: str, line: str) -> None:
     """Append a timestamped line and notify any SSE clients following this job."""
@@ -111,30 +88,11 @@ def write_lines(run_id: str, job_name: str, lines: list[str]) -> None:
     _notify(run_id, job_name)
 
 
-# ---------------------------------------------------------------------------
-# Per-job SSE streaming
-# ---------------------------------------------------------------------------
-
 def stream_logs(run_id: str, job_name: str, follow: bool = False) -> Iterator[str]:
-    """Yield SSE-formatted events for a single job's log.
-
-    Phase 1 — Backlog replay: reads the log file from the beginning in
-    CHUNK_SIZE chunks. A client connecting mid-run sees everything that
-    already happened before the live tail begins.
-
-    Phase 2 — Live tail (follow=True only): seeks to the end of the file
-    and waits on a threading.Event. write_line() sets the event; this loop
-    wakes, reads new lines, and yields them. When close_log() removes the
-    watcher entry, _get_event() returns None and the loop drains any lines
-    written in the last window before exiting.
-
-    Yields complete SSE events:
-        data: {"ts": "...", "job": "...", "line": "..."}\n\n
-    """
+    """Yield SSE-formatted events for a single job's log."""
     path = get_log_path(run_id, job_name)
     key = _watcher_key(run_id, job_name)
 
-    # Phase 1: replay everything already on disk.
     if path.exists():
         with open(path, "r", encoding="utf-8") as f:
             while True:
@@ -146,42 +104,22 @@ def stream_logs(run_id: str, job_name: str, follow: bool = False) -> Iterator[st
     if not follow:
         return
 
-    # Phase 2: live tail. Ensure the file exists so we can open it even if
-    # the job hasn't written its first line yet.
     path.touch(exist_ok=True)
 
     with open(path, "r", encoding="utf-8") as f:
-        f.seek(0, 2)  # start at end; backlog already replayed above
+        f.seek(0, 2)
         while True:
             event = _get_event(key)
             if event is None:
-                # Job finished — drain any lines written since our last read.
                 yield from _parse_chunk(f.read(), job_name)
                 break
-
             event.wait(timeout=1.0)
             event.clear()
-
             yield from _parse_chunk(f.read(), job_name)
 
 
-# ---------------------------------------------------------------------------
-# Run-level SSE streaming (all jobs)
-# ---------------------------------------------------------------------------
-
 def stream_run_logs(run_id: str, follow: bool = False) -> Iterator[str]:
-    """Yield SSE-formatted events for every job in a run.
-
-    follow=False: streams each job's existing log lines sequentially.
-                  Memory usage is bounded to CHUNK_SIZE regardless of log size.
-
-    follow=True:  spawns one daemon thread per job, each running stream_logs()
-                  with follow=True. All threads feed into a shared Queue. The
-                  generator reads from the queue until every job thread has sent
-                  its sentinel, then exits. Interleaving is arrival-order, not
-                  timestamp-order — each event carries "ts" and "job" fields so
-                  the client can sort if needed.
-    """
+    """Yield SSE-formatted events for every job in a run."""
     from registry import metadata
 
     job_rows = metadata.list_jobs(run_id)
@@ -203,8 +141,6 @@ def stream_run_logs(run_id: str, follow: bool = False) -> Iterator[str]:
                     yield from _parse_chunk(chunk, job_name)
         return
 
-    # follow=True: fan-in all job streams into a single queue.
-    # None is the per-job sentinel; when all sentinels arrive we stop.
     q: queue.Queue[str | None] = queue.Queue()
 
     def _feed(job_name: str) -> None:
@@ -228,16 +164,11 @@ def stream_run_logs(run_id: str, follow: bool = False) -> Iterator[str]:
             yield item
 
 
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
-
 def _watcher_key(run_id: str, job_name: str) -> str:
     return f"{run_id}/{job_name}"
 
 
 def _notify(run_id: str, job_name: str) -> None:
-    """Wake any SSE followers waiting on this job."""
     key = _watcher_key(run_id, job_name)
     with _watchers_lock:
         event = _watchers.get(key)

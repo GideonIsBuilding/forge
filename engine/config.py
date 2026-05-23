@@ -68,6 +68,10 @@ def registry_url() -> str:
 
 
 def slack_webhook_url() -> Optional[str]:
+    import os
+    env_val = os.environ.get("SLACK_WEBHOOK_URL")
+    if env_val:
+        return env_val
     return get("slack.webhook_url")
 
 
@@ -77,3 +81,7 @@ def engine_host() -> str:
 
 def engine_port() -> int:
     return int(get("engine.port", 8080))
+
+
+def host_workspace_dir() -> str:
+    return get("storage.host_workspace_dir", get("storage.workspace_dir", "workspaces"))

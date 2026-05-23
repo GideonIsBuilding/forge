@@ -303,7 +303,7 @@ class DockerRunner:
             f"--pids-limit={self.cfg.pids_limit}",
             # Security hardening
             "--cap-drop=ALL",
-            "--no-new-privileges",
+            "--security-opt", "no-new-privileges:true",
             "--read-only",  # root FS read-only ...
             "--tmpfs=/tmp:rw,noexec,nosuid,size=64m",  # ... except /tmp
             # Environment injected for forge publish inside pipelines
