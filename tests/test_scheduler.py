@@ -30,7 +30,7 @@ class MockRunner:
         self._active = 0
         self.peak_concurrency = 0
 
-    async def run_job(self, job: Job, workspace: Path, forge_url: str, forge_token: str) -> JobResult:
+    async def run_job(self, job: Job, workspace: Path, forge_url: str, forge_token: str, run_id: str = "") -> JobResult:
         self.calls.append(job.name)
         self._active += 1
         self.peak_concurrency = max(self.peak_concurrency, self._active)

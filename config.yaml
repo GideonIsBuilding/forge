@@ -1,19 +1,17 @@
-server:
-  host: 0.0.0.0
+engine:
+  host: "0.0.0.0"
   port: 8080
-  public_url: "http://localhost:8080"
+  log_dir: "logs"
+  max_concurrency: 2
+  max_job_duration_s: 1800
 
-database:
-  url: "sqlite:///data/forge.db"
+registry:
+  url: "http://localhost:8080"
+  db_path: "data/forge.db"
+  blob_dir: "blobs"
 
 storage:
-  blob_dir: "blobs"
-  log_dir: "logs"
   workspace_dir: "workspaces"
-
-runs:
-  max_concurrency: 2
-  default_timeout_seconds: 1800
 
 runner:
   docker_network: "forge_build_net"
