@@ -1,0 +1,13 @@
+name: test-fs-escape
+version: 1.0.0
+dependencies: []
+jobs:
+  build:
+    runtime: alpine:3.18
+    resources:
+      cpu: 0.5
+      memory: 128Mi
+    steps:
+      - name: escape
+        run: "cat /etc/shadow || cat /proc/1/environ || ls /host || echo 'escape attempted'"
+artifacts: []
