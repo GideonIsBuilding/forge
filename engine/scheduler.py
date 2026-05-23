@@ -2,14 +2,17 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from collections import defaultdict, deque
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Protocol
 
+from engine import deps as dep_materializer
 from engine.logs import close_log, register_job
 from engine.parser import Job, Pipeline
 from engine.runner import JobResult
+from engine import runs as run_lifecycle
 from registry import metadata
 
 logger = logging.getLogger(__name__)
@@ -145,7 +148,7 @@ async def execute_pipeline(
     try:
         topological_batches(needs_map)
     except JobCycleError:
-        metadata.update_run_status(run_id, "cycle_failure")
+        run_lifecycle.mark_run_status(run_id, "cycle_failure")
         raise
 
     # Persist all jobs as "queued" upfront. Clients polling GET /runs/{id}
@@ -158,7 +161,20 @@ async def execute_pipeline(
             runtime=job.runtime,
         )
 
-    metadata.update_run_status(run_id, "running")
+    # Materialize resolved dependencies into workspace/deps/ before any job
+    # starts. This is blocking I/O so it runs in the default executor.
+    run_row = metadata.get_run(run_id)
+    if run_row and run_row.lockfile and run_row.lockfile.get("resolved"):
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(
+            None,
+            dep_materializer.materialize,
+            run_row.lockfile,
+            workspace,
+        )
+
+    run_lifecycle.mark_run_status(run_id, "running")
+    run_start = time.monotonic()
     logger.info(
         "Run %s started — %d job(s), max_concurrency=%d",
         run_id, len(jobs), max_concurrency,
@@ -234,8 +250,8 @@ async def execute_pipeline(
         for name in jobs:
             tg.create_task(run_one(name))
 
-    # A skipped job implies a failed ancestor, so any failure → run "failed".
+    duration_s = time.monotonic() - run_start
     final_status = "failed" if any(s == "failed" for s in job_statuses.values()) else "succeeded"
-    metadata.update_run_status(run_id, final_status)
-    logger.info("Run %s completed: %s", run_id, final_status)
+    run_lifecycle.mark_run_status(run_id, final_status, duration_s)
+    logger.info("Run %s completed: %s (%.2fs)", run_id, final_status, duration_s)
     return final_status
