@@ -1,7 +1,10 @@
 """
 engine/runs.py
 
-Run lifecycle management. Stage 0: public interface stubs only.
+Run lifecycle management.
+The DB must already be initialised (via db.init()) before any function here
+is called — either by the FastAPI lifespan handler in production or by the
+test fixture in tests.
 """
 
 import logging
@@ -9,8 +12,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
-from engine import config
-from registry import db, metadata
+from registry import metadata
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +28,6 @@ def _now() -> str:
 
 def create_run(pipeline_yaml: str, pipeline_name: str) -> str:
     """Persist a new run record and return its run_id."""
-    db.init(config.db_path())
     run_id = str(uuid.uuid4())
     metadata.create_run(
         run_id=run_id,
@@ -39,13 +40,11 @@ def create_run(pipeline_yaml: str, pipeline_name: str) -> str:
 
 def get_run(run_id: str) -> Optional[metadata.RunRow]:
     """Return the current state of a run, or None if not found."""
-    db.init(config.db_path())
     return metadata.get_run(run_id)
 
 
 def get_run_jobs(run_id: str) -> List[metadata.JobRow]:
     """Return all jobs belonging to a run."""
-    db.init(config.db_path())
     return metadata.list_jobs(run_id)
 
 
