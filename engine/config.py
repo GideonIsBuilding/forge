@@ -7,6 +7,7 @@ All other modules import from here — never read config.yaml directly.
 
 import logging
 from pathlib import Path
+from typing import Optional, Union
 
 import yaml
 
@@ -16,11 +17,8 @@ _DEFAULT_CONFIG_PATH = Path("config.yaml")
 _config: dict = {}
 
 
-def load(path: str | Path | None = None) -> None:
-    """
-    Load config.yaml into memory. Call once at application startup.
-    Safe to call multiple times (e.g. in tests).
-    """
+def load(path: Optional[Union[str, Path]] = None) -> None:
+    """Load config.yaml into memory. Call once at application startup."""
     global _config
     config_path = Path(path) if path else _DEFAULT_CONFIG_PATH
     with open(config_path) as f:
@@ -29,10 +27,7 @@ def load(path: str | Path | None = None) -> None:
 
 
 def get(key: str, default=None):
-    """
-    Fetch a top-level config value by key.
-    Use dot notation for nested keys: get("registry.db_path")
-    """
+    """Fetch a config value using dot notation: get('engine.max_concurrency')"""
     keys = key.split(".")
     val = _config
     for k in keys:
@@ -45,7 +40,7 @@ def get(key: str, default=None):
 
 
 # ---------------------------------------------------------------------------
-# Typed accessors — all other modules use these, never get() directly
+# Typed accessors
 # ---------------------------------------------------------------------------
 
 def db_path() -> str:
@@ -61,7 +56,7 @@ def log_dir() -> str:
 
 
 def max_job_duration_s() -> int:
-    return int(get("engine.max_job_duration_s", 1800))  # 30 min default
+    return int(get("engine.max_job_duration_s", 1800))
 
 
 def max_concurrency() -> int:
@@ -72,7 +67,7 @@ def registry_url() -> str:
     return get("registry.url", "http://localhost:8080")
 
 
-def slack_webhook_url() -> str | None:
+def slack_webhook_url() -> Optional[str]:
     return get("slack.webhook_url")
 
 

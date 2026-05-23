@@ -2,23 +2,27 @@
 registry/auth.py
 
 Bearer token auth for the Forge registry.
-Tokens are stored as bcrypt hashes — never plaintext.
+Tokens are stored as argon2 hashes — never plaintext.
 
 Public interface
 ----------------
 create_token(identity)       -> raw token string (shown once, then gone)
 verify_token(raw_token)      -> identity string | None
-require_auth(request)        -> identity string (raises AuthError if invalid)
+require_auth(header)         -> identity string (raises AuthError if invalid)
 """
 
 import logging
 import secrets
+from datetime import datetime, timezone
 
-import bcrypt
+from typing import Dict, List, Optional
+from passlib.context import CryptContext
 
-from registry import db, metadata
+from registry import db
 
 logger = logging.getLogger(__name__)
+
+_pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
 
 class AuthError(Exception):
@@ -31,12 +35,11 @@ class AuthError(Exception):
 def create_token(identity: str) -> str:
     """
     Generate a new bearer token for the given identity.
-    Stores the bcrypt hash in the DB and returns the raw token.
+    Stores the argon2 hash in the DB and returns the raw token.
     The raw token is shown exactly once — it cannot be recovered later.
     """
-    from datetime import datetime, timezone
-    raw = secrets.token_hex(32)  # 64-char hex string
-    token_hash = bcrypt.hashpw(raw.encode(), bcrypt.gensalt()).decode()
+    raw = secrets.token_hex(32)
+    token_hash = _pwd_context.hash(raw)
     now = datetime.now(timezone.utc).isoformat()
 
     with db.transaction() as conn:
@@ -49,19 +52,19 @@ def create_token(identity: str) -> str:
     return raw
 
 
-def verify_token(raw_token: str) -> str | None:
+def verify_token(raw_token: str) -> Optional[str]:
     """
     Check raw_token against every stored hash.
     Returns the identity string on match, or None if invalid.
     """
     rows = db.fetchall("SELECT token_hash, identity FROM tokens")
     for row in rows:
-        if bcrypt.checkpw(raw_token.encode(), row["token_hash"].encode()):
+        if _pwd_context.verify(raw_token, row["token_hash"]):
             return row["identity"]
     return None
 
 
-def require_auth(authorization_header: str | None) -> str:
+def require_auth(authorization_header: Optional[str]) -> str:
     """
     Validate the Authorization header from an HTTP request.
     Expects: 'Bearer <token>'
@@ -84,10 +87,10 @@ def require_auth(authorization_header: str | None) -> str:
     return identity
 
 
-def list_tokens() -> list[dict]:
+def list_tokens() -> List[dict]:
     """
-    Return all token records (hash + identity + created_at).
-    Used for admin inspection — never returns raw tokens.
+    Return all token records (id + identity + created_at).
+    Never returns raw tokens or hashes.
     """
     rows = db.fetchall("SELECT id, identity, created_at FROM tokens")
     return [dict(r) for r in rows]
