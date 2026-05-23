@@ -21,3 +21,11 @@ workspaces/
 .env
 .env.*
 !.env.example
+
+infra/terraform.tfstate
+infra/terraform.tfstate.backup
+infra/.terraform/
+infra/.terraform.lock.hcl
+infra/.terraformrc
+infra/terraform.tfvars
+infra/terraform.tfvars.json
