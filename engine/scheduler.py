@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Protocol
 
+from engine.logs import close_log, register_job
 from engine.parser import Job, Pipeline
 from engine.runner import JobResult
 from registry import metadata
@@ -190,7 +191,11 @@ async def execute_pipeline(
                 done_events[job_name].set()
                 return
 
-        # All deps succeeded. Compete for a concurrency slot then execute.
+        # All deps succeeded. Register the log watcher before acquiring the
+        # semaphore so SSE clients connecting now will wait for lines rather
+        # than see no watcher and assume the job is already finished.
+        register_job(run_id, job_name)
+
         async with semaphore:
             started = _now()
             metadata.update_job_status(run_id, job_name, "running", started_at=started)
@@ -212,6 +217,10 @@ async def execute_pipeline(
                     started_at=started,
                     finished_at=finished,
                 )
+                # close_log() must come before done_events.set() so that
+                # SSE threads receive their shutdown signal before the scheduler
+                # coroutines for dependent jobs are unblocked.
+                close_log(run_id, job_name)
                 done_events[job_name].set()
                 logger.info(
                     "Job %s/%s %s (exit_code=%d)", run_id, job_name, outcome, exit_code
