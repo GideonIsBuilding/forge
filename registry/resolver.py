@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Callable
 
 
 class ResolutionError(ValueError):
@@ -55,6 +56,76 @@ def select_highest(versions: list[str], constraints: list[str]) -> str:
         if all(satisfies(raw, constraint) for constraint in constraints):
             return raw
     raise VersionConflictError(f"no version satisfies constraints: {', '.join(constraints)}")
+
+
+def resolve(
+    direct_deps: list[tuple[str, str]],
+    fetch_versions: Callable[[str], list[str]],
+    fetch_meta: Callable[[str, str], tuple[str, list[tuple[str, str]]]],
+) -> dict:
+    """Resolve direct_deps transitively and return a lockfile dict.
+
+    Args:
+        direct_deps:   [(name, constraint), ...] from pipeline.dependencies.
+        fetch_versions: callable(name) -> [version_str, ...]
+        fetch_meta:     callable(name, version) -> (sha256, [(dep_name, dep_constraint), ...])
+
+    Returns:
+        {"resolved": [{"name": ..., "version": ..., "sha256": ...}, ...]}
+
+    Raises:
+        VersionConflictError  if no version satisfies the accumulated constraints.
+        DependencyCycleError  if a cycle is detected in the dependency graph.
+    """
+    # Accumulate all constraints as the graph is walked.
+    constraints: dict[str, list[str]] = {}
+    for name, constraint in direct_deps:
+        constraints.setdefault(name, []).append(constraint)
+
+    resolved: dict[str, dict] = {}
+    # DFS stack — a package in here is currently being resolved.
+    # Encountering it again before it finishes means there is a cycle.
+    in_stack: set[str] = set()
+
+    def _resolve_one(name: str) -> None:
+        # Cycle check must come first: resolved[name] is set before transitive
+        # deps are walked, so a cycle would silently return via the resolved guard.
+        if name in in_stack:
+            raise DependencyCycleError(
+                f"dependency cycle detected involving {name!r}"
+            )
+
+        if name in resolved:
+            # Already resolved — verify that any newly accumulated constraints
+            # are still satisfied by the chosen version.
+            ver = resolved[name]["version"]
+            bad = [c for c in constraints.get(name, []) if not satisfies(ver, c)]
+            if bad:
+                raise VersionConflictError(
+                    f"{name}@{ver} does not satisfy: {', '.join(bad)}"
+                )
+            return
+
+        in_stack.add(name)
+
+        versions = fetch_versions(name)
+        if not versions:
+            raise VersionConflictError(f"no versions published for {name!r}")
+
+        version = select_highest(versions, constraints.get(name, []))
+        sha256, transitive = fetch_meta(name, version)
+        resolved[name] = {"name": name, "version": version, "sha256": sha256}
+
+        for dep_name, dep_constraint in transitive:
+            constraints.setdefault(dep_name, []).append(dep_constraint)
+            _resolve_one(dep_name)
+
+        in_stack.discard(name)
+
+    for name in list(constraints.keys()):
+        _resolve_one(name)
+
+    return {"resolved": list(resolved.values())}
 
 
 def _satisfies_comparators(version: Version, constraint: str) -> bool:
