@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from engine import config, logs, slack
 from engine import runs as run_lifecycle
 from engine.runner import DockerRunner
-from engine.scheduler import execute_pipeline
+from engine.scheduler import execute_pipeline, JobCycleError
 from engine.publisher import PublishError
 from engine.preflight import run_preflight, PreflightError
 from engine.deps import DepChecksumMismatchError, DepNotFoundError
@@ -100,6 +100,9 @@ async def _execute_pipeline_background(
             forge_token=forge_token,
             max_concurrency=config.max_concurrency(),
         )
+    except JobCycleError:
+        # Status already set to cycle_failure by the scheduler — don't overwrite
+        pass
     except DepChecksumMismatchError as exc:
         logger.error("Run %s: integrity failure — %s", run_id, exc)
         run_lifecycle.mark_run_status(run_id, "integrity_failure")
@@ -110,12 +113,15 @@ async def _execute_pipeline_background(
             expected_sha256=getattr(exc, "expected", "unknown"),
             actual_sha256=getattr(exc, "actual", "unknown"),
         )
+        return
     except DepNotFoundError as exc:
         logger.error("Run %s: dep not found — %s", run_id, exc)
         run_lifecycle.mark_run_status(run_id, "failed")
+        return
     except PublishError as exc:
         logger.error("Run %s: publish error — %s", run_id, exc)
         run_lifecycle.mark_run_status(run_id, "failed")
+        return
     except Exception:
         logger.exception("Run %s: unhandled error in pipeline execution", run_id)
         run_lifecycle.mark_run_status(run_id, "failed")
