@@ -9,7 +9,8 @@ services:
       - forge-data:/app/data
       - forge-blobs:/app/blobs
       - forge-logs:/app/logs
-      - forge-workspaces:/app/workspaces
+      - /tmp/forge-workspaces:/app/workspaces
+      - /tmp/forge-workspaces:/tmp/forge-workspaces
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       FORGE_CONFIG: /app/config.yaml
@@ -26,4 +27,3 @@ volumes:
   forge-data:
   forge-blobs:
   forge-logs:
-  forge-workspaces:

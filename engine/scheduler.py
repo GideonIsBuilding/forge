@@ -119,6 +119,7 @@ async def execute_pipeline(
     runner: RunnerProtocol,
     *,
     workspace: Path,
+    publisher_workspace: Path | None = None,
     forge_url: str,
     forge_token: str,
     max_concurrency: int,
@@ -284,7 +285,7 @@ async def execute_pipeline(
         try:
             published = artifact_publisher.publish_pipeline_artifacts(
                 pipeline=pipeline,
-                workspace=workspace,
+                workspace=publisher_workspace or workspace,
                 run_id=run_id,
                 forge_url=forge_url,
                 forge_token=forge_token,

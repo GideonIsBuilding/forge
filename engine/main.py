@@ -58,14 +58,6 @@ async def _execute_pipeline_background(
     forge_url: str,
     forge_token: str,
 ) -> None:
-    """
-    Full pipeline lifecycle in a background task:
-      1. Parse YAML (already validated; re-parse to get the Pipeline object)
-      2. Preflight: resolve deps, store lockfile
-      3. Create workspace directory
-      4. Execute jobs via DockerRunner
-    Errors are caught and written to the run status so they're visible via the API.
-    """
     from engine.parser import parse_pipeline_yaml as _parse
 
     try:
@@ -75,11 +67,9 @@ async def _execute_pipeline_background(
         logger.error("Run %s: re-parse failed unexpectedly: %s", run_id, exc)
         return
 
-    # Preflight: dependency resolution
     try:
         run_preflight(pipeline, run_id)
     except PreflightError as exc:
-        # run status already set by run_preflight; fire Slack resolution alert
         slack.notify_resolution_failure(
             run_id=run_id,
             pipeline_name=pipeline.name,
@@ -87,10 +77,16 @@ async def _execute_pipeline_background(
         )
         return
 
-    # Create an isolated workspace for this run
-    workspace_root = Path(config.get("storage.workspace_dir", "workspaces"))
+    # host_workspace: path Docker Desktop can mount (host-side)
+    # container_workspace: path inside the API container (for publisher)
+    workspace_root = Path(config.get("storage.host_workspace_dir", "/tmp/forge-workspaces"))
+    
+
     workspace = workspace_root / run_id
+    
+
     workspace.mkdir(parents=True, exist_ok=True)
+    
 
     runner = DockerRunner()
 
@@ -105,10 +101,8 @@ async def _execute_pipeline_background(
             max_concurrency=config.max_concurrency(),
         )
     except DepChecksumMismatchError as exc:
-        # Integrity failure: log both hashes, notify Slack, mark status
         logger.error("Run %s: integrity failure — %s", run_id, exc)
         run_lifecycle.mark_run_status(run_id, "integrity_failure")
-        # Parse name/version/hashes from the exception for the Slack alert
         slack.notify_integrity_failure(
             run_id=run_id,
             artifact_name="unknown",
@@ -145,18 +139,16 @@ async def create_run(
     run_id = str(uuid.uuid4())
     metadata.create_run(run_id=run_id, pipeline_name=parsed.name, pipeline_yaml=raw.decode("utf-8"))
     logger.info("Run %s queued by %s (pipeline=%s)", run_id, identity, parsed.name)
+
     if resolve_only:
         try:
             run_preflight(parsed, run_id)
         except PreflightError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-
         return {"run_id": run_id}
-    # Derive forge_url and a system token for background execution.
-    # The system uses the same token the submitter authenticated with so
-    # intra-pipeline `forge publish` calls are properly authorized.
+
     forge_url = config.registry_url()
-    forge_token = authorization.removeprefix("Bearer ").strip()  # type: ignore[union-attr]
+    forge_token = authorization.removeprefix("Bearer ").strip()
 
     background_tasks.add_task(
         _execute_pipeline_background,
@@ -225,7 +217,6 @@ async def publish_artifact(
     authorization: str | None = Header(default=None),
 ) -> JSONResponse:
     import io
-
     publisher = require_write_token(authorization)
     blob_data = await file.read()
     try:

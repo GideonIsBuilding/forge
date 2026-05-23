@@ -12,9 +12,10 @@ registry:
 
 storage:
   workspace_dir: "workspaces"
+  host_workspace_dir: "/tmp/forge-workspaces"
 
 runner:
-  docker_network: "forge_build_net"
+  docker_network: "forge_forge-build-net"
   registry_host: "forge-api"
   default_image: "alpine:3.18"
   pids_limit: 256
