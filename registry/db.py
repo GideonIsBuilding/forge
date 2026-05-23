@@ -8,14 +8,14 @@ import sqlite3
 import threading
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Generator, Iterator, List, Optional, Union
+from typing import Generator
 
 _DEFAULT_DB_PATH = Path("data/registry.db")
 _local = threading.local()
 _db_path: Path = _DEFAULT_DB_PATH
 
 
-def init(db_path: Optional[Union[str, Path]] = None) -> None:
+def init(db_path: str | Path | None = None) -> None:
     """Call once at startup to set the DB file location."""
     global _db_path
     _db_path = Path(db_path) if db_path else _DEFAULT_DB_PATH
@@ -64,9 +64,9 @@ def execute(sql: str, params: tuple = ()) -> sqlite3.Cursor:
     return get_db().execute(sql, params)
 
 
-def fetchone(sql: str, params: tuple = ()) -> Optional[sqlite3.Row]:
+def fetchone(sql: str, params: tuple = ()) -> sqlite3.Row | None:
     return get_db().execute(sql, params).fetchone()
 
 
-def fetchall(sql: str, params: tuple = ()) -> List[sqlite3.Row]:
+def fetchall(sql: str, params: tuple = ()) -> list[sqlite3.Row]:
     return get_db().execute(sql, params).fetchall()
