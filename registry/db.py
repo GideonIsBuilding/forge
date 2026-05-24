@@ -10,7 +10,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Generator
 
-_DEFAULT_DB_PATH = Path("data/registry.db")
+_DEFAULT_DB_PATH = Path("data/forge.db")
 _local = threading.local()
 _db_path: Path = _DEFAULT_DB_PATH
 
