@@ -1,6 +1,7 @@
 # Copy this file to terraform.tfvars and fill in your values.
 # NEVER commit terraform.tfvars — it contains secrets.
 
-region             = "us-east-1"
-instance_name      = "forge-ci"
-slack_webhook_url  = "https://hooks.slack.com/services/XXX/YYY/ZZZ"
+region            = "us-east-1"
+instance_name     = "forge-ci"
+slack_webhook_url = "https://hooks.slack.com/services/XXX/YYY/ZZZ"
+repo_url          = "https://github.com/your-org/forge.git"

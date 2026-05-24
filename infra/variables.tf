@@ -15,3 +15,8 @@ variable "slack_webhook_url" {
   type        = string
   sensitive   = true
 }
+
+variable "repo_url" {
+  description = "Git repository URL to clone and deploy (e.g. https://github.com/org/forge.git)"
+  type        = string
+}

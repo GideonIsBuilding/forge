@@ -164,11 +164,17 @@ Screenshot: `TODO`
 ## Fresh VPS Setup
 
 ```bash
-git clone <repo-url> forge
+git clone https://github.com/GideonIsBuilding/forge.git forge
 cd forge
 cp config.yaml config.prod.yaml
 docker compose up -d --build
-docker compose exec forge-api python -m registry.auth create-token --identity admin
+docker compose exec forge-api python -c "
+from registry import db, auth
+from registry.init_db import create_schema
+db.init('data/forge.db')
+create_schema()
+token = auth.create_token('admin')
+print('Token:', token)"
 ```
 
 Then run:

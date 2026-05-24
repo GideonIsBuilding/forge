@@ -72,7 +72,13 @@ docker compose logs -f forge-api
 ### 6. Create the First Auth Token
 
 ```bash
-docker compose exec forge-api python -m registry.auth create-token --identity admin
+docker compose exec forge-api python -c "
+from registry import db, auth
+from registry.init_db import create_schema
+db.init('data/forge.db')
+create_schema()
+token = auth.create_token('admin')
+print('Token:', token)"
 ```
 
 This prints a raw token **once** — copy it immediately. It cannot be recovered.
