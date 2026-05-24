@@ -44,7 +44,7 @@ def get(key: str, default=None):
 # ---------------------------------------------------------------------------
 
 def db_path() -> str:
-    return get("registry.db_path", "data/registry.db")
+    return get("registry.db_path", "data/forge.db")
 
 
 def blob_dir() -> str:
