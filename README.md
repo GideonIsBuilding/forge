@@ -184,6 +184,8 @@ forge login http://<server-ip>:8080
 forge run examples/lib-core.yaml
 ```
 
+![Slack](./slack.png)
+
 ## Required Capability Checklist
 
 - [ ] pipeline builds and publishes `lib-core@1.0.0`
