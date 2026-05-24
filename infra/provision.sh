@@ -55,6 +55,9 @@ apt-get install -yq \
   docker-compose-plugin
 
 systemctl enable --now docker
+
+# Add ubuntu user to the docker group for non-root docker access
+usermod -aG docker ubuntu
 echo "[forge-provision] Docker $(docker --version) installed"
 
 # -----------------------------------------------------------------------------
@@ -101,7 +104,6 @@ echo "[forge-provision] Docker daemon configured"
 #   DockerRunner (which calls docker run from inside the container using the
 #   host Docker socket) can mount the correct host path into each job container.
 # -----------------------------------------------------------------------------
-mkdir -p /opt/forge
 mkdir -p /tmp/forge-workspaces
 chmod 1777 /tmp/forge-workspaces
 echo "[forge-provision] directories created"
@@ -205,17 +207,99 @@ SLACK_URL=$(aws ssm get-parameter \
   --output text \
   --region "$REGION" 2>/dev/null || true)
 
-mkdir -p /opt/forge
 if [ -n "$SLACK_URL" ]; then
-  echo "SLACK_WEBHOOK_URL=$SLACK_URL" > /opt/forge/.env
-  chmod 600 /opt/forge/.env
-  echo "[forge-provision] Slack webhook written to /opt/forge/.env"
+  echo "SLACK_WEBHOOK_URL=$SLACK_URL" > /tmp/forge.env
+  echo "[forge-provision] Slack webhook staged to /tmp/forge.env"
 else
-  echo "[forge-provision] WARNING: could not fetch Slack webhook from SSM — .env not written"
+  echo "[forge-provision] WARNING: could not fetch Slack webhook from SSM"
 fi
 
 # -----------------------------------------------------------------------------
-# 12. Pre-pull base images
+# 12. Clone the Forge repository then move .env into place
+# -----------------------------------------------------------------------------
+git clone "$REPO_URL" /opt/forge
+echo "[forge-provision] repo cloned to /opt/forge"
+
+if [ -f /tmp/forge.env ]; then
+  mv /tmp/forge.env /opt/forge/.env
+  chmod 600 /opt/forge/.env
+  echo "[forge-provision] Slack webhook written to /opt/forge/.env"
+fi
+
+# Update registry.url to the Docker service name so build containers
+# (which run on forge-build-net, an internal network with no external routing)
+# can reach the Forge API. http://localhost:8080 and the public IP both fail
+# from inside a build container — only the service name resolves correctly.
+sed -i 's|url: "http://localhost:8080"|url: "http://forge-api:8080"|' /opt/forge/config.yaml
+echo "[forge-provision] config.yaml registry.url set to http://forge-api:8080"
+
+# -----------------------------------------------------------------------------
+# 13. Python 3.11 + virtualenv (for the forge CLI and local tooling)
+# Docker handles the runtime environment, but the CLI needs a host-side venv.
+# deadsnakes PPA provides 3.11 on Ubuntu 22.04 which ships 3.10 by default.
+# -----------------------------------------------------------------------------
+add-apt-repository ppa:deadsnakes/ppa -y
+apt-get update -q
+apt-get install -yq python3.11 python3.11-venv
+
+cd /opt/forge
+python3.11 -m venv .venv
+.venv/bin/pip install --upgrade pip -q
+.venv/bin/pip install -e . -q
+echo "[forge-provision] Python 3.11 venv ready at /opt/forge/.venv"
+
+# Make the forge CLI available system-wide via the venv
+ln -sf /opt/forge/.venv/bin/forge /usr/local/bin/forge
+echo "[forge-provision] forge CLI linked to /usr/local/bin/forge"
+
+# -----------------------------------------------------------------------------
+# 14. systemd service — manages Forge start/stop and auto-restart on reboot
+# Using systemd as the single entry point (instead of calling docker compose
+# directly) means `systemctl start/stop/restart forge` is the only interface
+# needed — no manual docker compose invocations.
+# TimeoutStartSec=300 covers the image build on first boot.
+# -----------------------------------------------------------------------------
+cat > /etc/systemd/system/forge.service <<'EOF'
+[Unit]
+Description=Forge CI/CD Platform
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/forge
+ExecStart=/usr/bin/docker compose up -d --build --remove-orphans
+ExecStop=/usr/bin/docker compose down
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now forge.service
+echo "[forge-provision] systemd forge.service enabled and started"
+
+# -----------------------------------------------------------------------------
+# 16. API health check — verify Forge is responding before declaring success
+# -----------------------------------------------------------------------------
+echo "[forge-provision] waiting for API to be ready..."
+for i in $(seq 1 24); do
+  if curl -sf http://localhost:8080/artifacts/forge > /dev/null 2>&1; then
+    echo "[forge-provision] API is live at http://localhost:8080"
+    break
+  fi
+  echo "[forge-provision] attempt $i/24 — retrying in 5s..."
+  sleep 5
+done
+
+if ! curl -sf http://localhost:8080/artifacts/forge > /dev/null 2>&1; then
+  echo "[forge-provision] ERROR: API did not respond after 120s — check: docker compose logs forge-api"
+fi
+
+# -----------------------------------------------------------------------------
+# 17. Pre-pull base images
 # Avoids a cold-start delay when the first pipeline runs against alpine:3.18.
 # Runs in the background so provisioning completes quickly.
 # -----------------------------------------------------------------------------
@@ -232,13 +316,16 @@ echo "[forge-provision] ============================================"
 echo "[forge-provision]"
 echo "[forge-provision] Next steps (run as root on the server):"
 echo "[forge-provision]"
-echo "[forge-provision]   1. Clone the repo:"
-echo "[forge-provision]      cd /opt/forge && git clone <repo-url> ."
+echo "[forge-provision]   Forge is running. One manual step remains:"
 echo "[forge-provision]"
-echo "[forge-provision]   2. Start the platform (.env already written by this script):"
-echo "[forge-provision]      docker compose up -d --build"
+echo "[forge-provision]   Create the first auth token:"
+echo "[forge-provision]     cd /opt/forge"
+echo "[forge-provision]     docker compose exec forge-api python -c \""
+echo "[forge-provision]     from registry import db, auth"
+echo "[forge-provision]     from registry.init_db import create_schema"
+echo "[forge-provision]     db.init('data/forge.db')"
+echo "[forge-provision]     create_schema()"
+echo "[forge-provision]     token = auth.create_token('admin')"
+echo "[forge-provision]     print('Token:', token)\""
 echo "[forge-provision]"
-echo "[forge-provision]   3. Create the first auth token:"
-echo "[forge-provision]      docker compose exec forge-api python -m registry.auth create-token --identity admin"
-echo "[forge-provision]"
-echo "[forge-provision]   4. Update README with the static IP from Terraform output."
+echo "[forge-provision]   Then update README with the static IP from Terraform output."

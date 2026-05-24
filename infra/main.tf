@@ -5,6 +5,10 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 6.0"
     }
+    null = {
+      source  = "hashicorp/null"
+      version = "~> 3.0"
+    }
   }
 }
 
@@ -156,7 +160,6 @@ resource "aws_instance" "forge" {
   key_name               = aws_key_pair.forge.key_name
   vpc_security_group_ids = [aws_security_group.forge.id]
   iam_instance_profile   = aws_iam_instance_profile.forge.name
-  user_data              = file("${path.module}/provision.sh")
 
   root_block_device {
     volume_type           = "gp3"
@@ -179,5 +182,39 @@ resource "aws_eip" "forge" {
 
   tags = {
     Name = "${var.instance_name}-eip"
+  }
+}
+
+# ---------------------------------------------------------------------------
+# Provisioner — SSH into the server and run provision.sh
+# Runs after the EIP is assigned so the connection host is stable.
+# Re-runs automatically if provision.sh changes (tracked via script_hash).
+# To re-run manually: terraform apply -replace=null_resource.forge_provision
+# ---------------------------------------------------------------------------
+resource "null_resource" "forge_provision" {
+  triggers = {
+    script_hash = filemd5("${path.module}/provision.sh")
+    instance_id = aws_instance.forge.id
+  }
+
+  depends_on = [aws_eip.forge]
+
+  connection {
+    type        = "ssh"
+    user        = "ubuntu"
+    host        = aws_eip.forge.public_ip
+    private_key = file("~/.ssh/id_ed25519")
+  }
+
+  provisioner "file" {
+    source      = "${path.module}/provision.sh"
+    destination = "/tmp/provision.sh"
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "chmod +x /tmp/provision.sh",
+      "sudo REPO_URL='${var.repo_url}' bash /tmp/provision.sh"
+    ]
   }
 }
