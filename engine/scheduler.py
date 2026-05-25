@@ -48,14 +48,6 @@ class RunnerProtocol(Protocol):
 
 
 def topological_batches(jobs: dict[str, list[str]]) -> list[list[str]]:
-    """Return parallel-runnable batches in dependency order.
-
-    Each batch contains jobs whose dependencies all appear in earlier batches.
-    Within a batch, all jobs can start simultaneously.
-
-    Raises SchedulerError  on unknown dependency references.
-    Raises JobCycleError   on dependency cycles (detected via Kahn's algorithm).
-    """
     missing = {dep for deps in jobs.values() for dep in deps if dep not in jobs}
     if missing:
         raise SchedulerError(f"unknown job dependency: {', '.join(sorted(missing))}")
