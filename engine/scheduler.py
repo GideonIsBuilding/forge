@@ -35,15 +35,6 @@ class JobCycleError(SchedulerError):
     pass
 
 
-# ---------------------------------------------------------------------------
-# Runner protocol
-#
-# DockerRunner raises NotImplementedError — tests and future implementations
-# satisfy this protocol without subclassing it. Any object with a matching
-# async run_job() signature qualifies.
-# ---------------------------------------------------------------------------
-
-
 class RunnerProtocol(Protocol):
     async def run_job(
         self,
@@ -54,13 +45,6 @@ class RunnerProtocol(Protocol):
         run_id: str,
     ) -> JobResult: ...
 
-
-# ---------------------------------------------------------------------------
-# Pure DAG algorithm (stateless, no I/O)
-#
-# Used both for early cycle detection in execute_pipeline and as a standalone
-# utility (e.g. Pre-build Preflight in the arch diagram).
-# ---------------------------------------------------------------------------
 
 
 def topological_batches(jobs: dict[str, list[str]]) -> list[list[str]]:
