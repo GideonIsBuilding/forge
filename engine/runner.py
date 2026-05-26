@@ -1,35 +1,3 @@
-"""
-engine/runner.py
-
-Docker-based job runner for the Forge CI/CD platform.
-
-Each job runs in a fresh, isolated container with:
-  - Its own PID/mount/network namespace (Docker default)
-  - CPU and memory limits enforced via cgroups v2
-  - PID limit to prevent fork-bombs
-  - Network restricted to forge-build-net (registry-only egress)
-  - No access to host filesystem beyond the job workspace
-  - Dropped capabilities + no-new-privileges
-  - Wall-clock timeout (SIGKILL on breach)
-
-Live log streaming
-------------------
-stdout/stderr are attached via docker logs --follow in a background thread.
-Each line is timestamped and written through engine.logs so SSE clients
-get it in real time. Logs are also persisted to disk automatically.
-
-OOM detection
--------------
-docker inspect after container exit exposes OOMKilled=true.
-When detected the job is failed with a clear OOM log line.
-
-Public interface
-----------------
-  RunnerConfig   — typed settings (from config.yaml)
-  JobResult      — exit_code, status, oom_killed flag
-  DockerRunner   — async run_job(job, workspace, forge_url, forge_token)
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -66,11 +34,6 @@ class JobResult:
     oom_killed: bool = False
 
 
-# ---------------------------------------------------------------------------
-# Memory unit parser
-# ---------------------------------------------------------------------------
-
-
 def _parse_memory_bytes(raw: str) -> int:
     """Convert a memory string like '512Mi', '1Gi', '256M' to bytes."""
     raw = raw.strip()
@@ -99,13 +62,7 @@ def _parse_memory_bytes(raw: str) -> int:
 
 
 class DockerRunner:
-    """Runs Forge jobs in isolated Docker containers.
-
-    The implementation should use Docker Engine API or docker CLI with:
-    memory/cpu limits, pids limit, dropped capabilities, no-new-privileges,
-    a dedicated workspace mount, and a network that only reaches Forge.
-    """
-
+ 
     def __init__(self, runner_cfg: Optional[RunnerConfig] = None) -> None:
         if runner_cfg is None:
             runner_cfg = RunnerConfig(
@@ -122,12 +79,7 @@ class DockerRunner:
     async def run_job(
         self, job: Job, workspace: Path, forge_url: str, forge_token: str, run_id: str
     ) -> JobResult:
-        """
-        Execute *job* inside a fresh Docker container and return a JobResult.
-
-        The coroutine offloads all blocking Docker I/O to a thread-pool
-        executor so the asyncio event loop stays responsive.
-        """
+    
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(
             None,
@@ -340,12 +292,7 @@ class DockerRunner:
         job_name: str,
         stop_event: threading.Event,
     ) -> None:
-        """
-        Stream container stdout/stderr into engine.logs in a background thread.
-
-        Uses `docker logs --follow` which streams lines as they are produced
-        by the container process — no buffering on our side.
-        """
+  
         try:
             proc = subprocess.Popen(
                 ["docker", "logs", "--follow", "--timestamps", container_id],
@@ -379,13 +326,7 @@ class DockerRunner:
         job_name: str,
         timeout_seconds: int,
     ) -> int:
-        """
-        Block until the container exits or the timeout fires.
-
-        `docker wait` blocks until the container stops and prints the exit code.
-        We run it with a subprocess timeout so we can enforce the wall-clock
-        limit ourselves.
-        """
+    
         try:
             result = subprocess.run(
                 ["docker", "wait", container_id],
