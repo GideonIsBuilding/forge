@@ -100,32 +100,7 @@ async def execute_pipeline(
     forge_token: str,
     max_concurrency: int,
 ) -> str:
-    """Drive a parsed pipeline to completion and return the final run status.
-
-    Job execution model
-    -------------------
-    Every job gets its own asyncio.Event. A job coroutine waits on each
-    dependency's event before deciding whether to run or skip. Once all deps
-    have fired their events the coroutine checks their outcomes:
-
-      - All deps succeeded  -> acquire the semaphore, run the job
-      - Any dep failed/skipped -> mark self as "skipped", fire own event
-
-    Because skipped jobs immediately fire their event, the skip propagates
-    transitively through the dependency graph without any explicit recursive
-    walk. Only the job that actually broke is marked "failed".
-
-    The asyncio.Semaphore(max_concurrency) caps how many jobs run Docker
-    containers simultaneously. Waiting and skipped jobs never hold a slot.
-
-    Status transitions
-    ------------------
-      Run: queued -> running -> succeeded | failed | cycle_failure
-      Job: queued -> running -> succeeded | failed | skipped
-
-    Raises JobCycleError if the dependency graph has a cycle (run is marked
-    cycle_failure before raising so the DB reflects the outcome).
-    """
+   
     jobs = pipeline.jobs
     needs_map = {name: list(job.needs) for name, job in jobs.items()}
 
