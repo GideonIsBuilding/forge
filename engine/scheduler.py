@@ -104,8 +104,6 @@ async def execute_pipeline(
     jobs = pipeline.jobs
     needs_map = {name: list(job.needs) for name, job in jobs.items()}
 
-    # Guard against cycles before touching the runner or writing job records.
-    # A cycle would cause coroutines to deadlock on event.wait() indefinitely.
     try:
         topological_batches(needs_map)
     except JobCycleError as exc:
@@ -117,8 +115,6 @@ async def execute_pipeline(
         )
         raise
 
-    # Persist all jobs as "queued" upfront. Clients polling GET /runs/{id}
-    # see the complete job list immediately, not incrementally as jobs start.
     for name, job in jobs.items():
         metadata.create_job(
             run_id=run_id,
@@ -127,8 +123,6 @@ async def execute_pipeline(
             runtime=job.runtime,
         )
 
-    # Materialize resolved dependencies into workspace/deps/ before any job
-    # starts. This is blocking I/O so it runs in the default executor.
     run_row = metadata.get_run(run_id)
     if run_row and run_row.lockfile and run_row.lockfile.get("resolved"):
         loop = asyncio.get_running_loop()
@@ -149,14 +143,8 @@ async def execute_pipeline(
         max_concurrency,
     )
 
-    # Per-job completion signal. A job sets its event when it finishes,
-    # regardless of outcome. Dependents wake on the event then inspect
-    # job_statuses to decide whether to run or skip.
     done_events: dict[str, asyncio.Event] = {name: asyncio.Event() for name in jobs}
     job_statuses: dict[str, str] = {}
-
-    # Concurrency cap: only max_concurrency jobs may run Docker containers at once.
-    # Acquired inside the coroutine after all deps have succeeded.
     semaphore = asyncio.Semaphore(max_concurrency)
 
     # Track the first failing job name for the Slack alert.
